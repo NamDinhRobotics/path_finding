@@ -78,6 +78,7 @@ class Graph
         closed_set_prev[i] = -1;
       }
     }
+
   
     // Monte Carlo simulation that computes average shortest path
     double monte_carlo_simu(double density, double range) 
@@ -110,7 +111,7 @@ class Graph
       string path = to_string(dst);
       path += " >- "; // will become -> after reverse
   
-      if (!closed_set)
+      if (!closed_set || closed_set_src != src)
         shortest_paths(src);
   
       int node = dst;
@@ -128,7 +129,7 @@ class Graph
     // return the shortest possible distance from src to dst
     double path_size(int src, int dst) 
     {
-      if (!closed_set)
+      if (!closed_set || closed_set_src != src)
         shortest_paths(src);
   
       return closed_set_dist[dst];
@@ -171,12 +172,13 @@ class Graph
     // compute shortest paths as per wikipedia Dijkstra UniformCostSearch method
     void shortest_paths(int src) 
     {
+      reset_closed_set();
       closed_set = true;
       closed_set_src = src;
   
       vector<double> open_set_dist(nodes, -1); // faster for 'belong to open_set' test
-      typedef tuple<double, int, int> dii; // dist from src, previous node, node
-      priority_queue<dii, vector<dii>, greater<dii>> open_set_pq; // faster for 'sort open_set'
+      typedef tuple<double, int, int> dii; // dist from src (must be first for sorting), previous node, node
+      priority_queue<dii, vector<dii>, greater<dii>> open_set_pq; // faster for 'sort/dequeue' on open_set
   
       open_set_pq.push(make_tuple(0.0, src, src));
   
@@ -225,6 +227,20 @@ class Graph
       } // end while
   
     };
+
+    void reset_closed_set() 
+    {
+      closed_set = false; // whether closed set is known or not
+      closed_set_src = -1; // src from which all shortest paths (stored in closed_set) are computed
+      closed_set_dist.resize(nodes);
+      closed_set_prev.resize(nodes);
+
+      for (int i = 0; i < nodes; i++) 
+      {
+        closed_set_dist[i] = -1;
+        closed_set_prev[i] = -1;
+      }
+    }
   
     int nodes; // number of nodes
     vector< vector<double> > mat; // connectivity matrix
