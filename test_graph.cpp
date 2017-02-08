@@ -1,15 +1,18 @@
-// g++ -Wall -std=c++11 test_graph.cpp -o test_graph
+// g++ -g -Wall -std=c++11 test_graph.cpp -o test_graph
 
 #include <iostream> // for cout
 #include <vector> // for vector container (main container here)
 #include <queue> // for priority_queue
 #include <algorithm> // for string reverse operation
 
+#include <fstream>
+#include <iterator>
+#include <cfloat> // for DBL_MAX
+
 using namespace std;
 
 // Debugging and unitary tests flags
-//#define DEBUG
-#define EXAMPLE_W2
+#define TEST_MST
 
 
 // computes a probability value between [0;1]
@@ -52,6 +55,20 @@ class Graph
     {
       reset();
     };
+
+    Graph(string fname)
+    {
+      ifstream data_file(fname);
+      istream_iterator<int> start(data_file), end;
+      vector<int> data(start, end);
+
+      //reset();
+
+      cout << data[0] << endl;
+      //auto it = start;
+      cout << *start << endl;
+      cout << data.size() << endl;
+    };
   
     // reset/init all Graph data execot number of nodes
     // typically before starting a new Monte Carlo simulation
@@ -81,21 +98,27 @@ class Graph
 
   
     // Monte Carlo simulation that computes average shortest path
-    double monte_carlo_simu(double density, double range) 
+    double monte_carlo_simu(double density, double range, int nsimu) 
     {
-      reset();
-      for (int i = 0; i < nodes; i++) 
+      double path = 0;
+
+      for (int i = 0; i < nsimu; i++) 
       {
-        add_edge(i, i, 0);
-        for (int j = i + 1; j < nodes; j++) // from j = i + 1: undirected graph
+        reset();
+        for (int i = 0; i < nodes; i++) 
         {
-          if (prob() < density) 
-            add_edge(i, j, 1 + prob() * (range-1));
+          add_edge(i, i, 0);
+          for (int j = i + 1; j < nodes; j++) // from j = i + 1: undirected graph
+          {
+            if (prob() < density) 
+              add_edge(i, j, 1 + prob() * (range-1));
+          }
         }
+        shortest_paths(0);
+        //print_shortest_paths();
+        path += average_shortest_path();
       }
-      shortest_paths(0);
-      //print_shortest_paths();
-      return average_shortest_path();
+      return path/nsimu;
     }
   
     // add an edge into an existing connectivity matrix
@@ -103,6 +126,8 @@ class Graph
     {
       if (x < nodes && y < nodes)
         mat[x][y] = mat[y][x] = cost;
+      else
+        cout << "WARNING: edge " << x << "," << y << " with non existing vertex" << endl;
     };
   
     // return the path from src to dst as a string
@@ -166,6 +191,67 @@ class Graph
           return (sum/num);
       }
       return -1;
+    }
+
+    // Compute Minimum Spanning Tree via Prim algorithm (cf https://en.wikipedia.org/wiki/Prim%27s_algorithm) 
+    // using a priority queue for faster execution
+    // The logic and code is very similar to Dijkstra implementation
+    bool mst(void)
+    {
+      int mst_len = 0;
+      mst_set = false;
+      mst_cost = 0;
+      mst_set_dist.resize(nodes, DBL_MAX);
+      mst_set_prev.resize(nodes, -1);
+
+      typedef tuple<double, int, int> dii; // dist from mst (must be first for sorting), edge from mst, node id
+      priority_queue<dii, vector<dii>, greater<dii>> open_set_pq; // faster for 'sort/dequeue' on open_set
+
+      open_set_pq.push(make_tuple(0.0, 0, 0));
+
+      while (!open_set_pq.empty())
+      {
+        dii node = open_set_pq.top();
+        double node_dist = get<0>(node);
+        int node_prev = get<1>(node);
+        int node_id = get<2>(node);
+        open_set_pq.pop();
+
+        // if not yet in MST
+        if (mst_set_prev[node_id] < 0)
+        {
+          mst_set_dist[node_id] = node_dist;
+          mst_set_prev[node_id] = node_prev;
+          mst_len++;
+          mst_cost += node_dist;
+
+          for (int i = 0; i < nodes; i++)
+          {
+            // if connection to node i exists && node i not yet in MST => add node i to open_set
+            if (mat[node_id][i] > 0 && mst_set_prev[i] < 0)
+            {
+              open_set_pq.push(make_tuple(mat[node_id][i], node_id, i));
+            }
+          }
+
+          // for debug
+          cout << "mst_len=" << mst_len << endl;
+          print_mst();
+        }
+      }
+
+      return mst_set = (mst_len == nodes);
+    }
+
+    // print Minimum Spanning Tree
+    void print_mst() 
+    {
+      cout << "Minimum Spanning tree: " << mst_set << " mst_cost=" << mst_cost << endl;
+      for (int i = 0; i < nodes; i++)
+      {
+        if (mst_set_prev[i] >= 0)
+          cout << "\tnode " << i << " => " << "dist=" << mst_set_dist[i] << " " << "prev=" << mst_set_prev[i] << endl;
+      }
     }
   
   private:
@@ -250,6 +336,12 @@ class Graph
     int closed_set_src; // src from which all shortest paths (stored in closed_set) are computed
     vector<double> closed_set_dist; // shortest distance from src to nodes
     vector<int> closed_set_prev; // previous node on the shortest path
+
+    // Minnimum Spanning Tree
+    bool mst_set; // whether MST exists or not
+    double mst_cost;
+    vector<double> mst_set_dist; // array of distances from the closest edge (cf below) to each vertex
+    vector<int> mst_set_prev; // array indicating, for a given vertex, which vertex in the tree it is closest to
 };
 
 ostream& operator<<(ostream& out, const Graph& graph) 
@@ -266,10 +358,9 @@ ostream& operator<<(ostream& out, const Graph& graph)
   return out;
 }
 
-int main() {
-  srand(time(0));
-
-#ifdef EXAMPLE_W2
+// test1 from example W2
+void test1_shortest_path()
+{
   // unitary test
   Graph g(9);
   g.add_edge(0, 1, 4.0);
@@ -297,22 +388,11 @@ int main() {
   cout << "shortest path from 0 to 8: " << g.path_size(0, 8) << endl;
   g.print_shortest_paths();
   cout << "average_shortest_path: " << g.average_shortest_path() << endl << endl << endl;
-#endif
+}
 
-  Graph g50(50);
-  int nsimu = 1000;
-  double path20 = 0;
-  double path40 = 0;
-  for (int i = 0; i < nsimu; i++) 
-  {
-    path20 += g50.monte_carlo_simu(0.2, 10);
-    path40 += g50.monte_carlo_simu(0.4, 10);
-  }
-
-  cout << "Average shortest path for a Graph with 50 nodes, density 20%, range 10: " << path20/nsimu << endl;
-  cout << "Average shortest path for a Graph with 50 nodes, density 40%, range 10: " << path40/nsimu << endl;
-
-#ifdef DEBUG
+// test2: more tricky
+void test2_shortest_path()
+{
   Graph g(10);
   g.add_edge(0, 3, 2.81);
   g.add_edge(0, 2, 5.98);
@@ -330,6 +410,57 @@ int main() {
   cout << "shortest path from 0 to 8: " << g.path_size(0, 5) << endl;
   g.print_shortest_paths();
   cout << "average_shortest_path: " << g.average_shortest_path() << endl;
+}
+
+void test1_mst()
+{
+  cout << "UNITARY TEST: " << __func__ << endl;
+  Graph g(9);
+  
+  g.add_edge(0, 1, 4.0);
+  g.add_edge(0, 7, 8.0);
+
+  g.add_edge(1, 2, 8.0);
+  g.add_edge(1, 7, 11.0);
+
+  g.add_edge(2, 3, 7.0);
+  g.add_edge(2, 5, 4.0);
+  g.add_edge(2, 8, 2.0);
+
+  g.add_edge(3, 4, 9.0);
+  g.add_edge(3, 5, 14.0);
+
+  g.add_edge(4, 5, 10.0);
+
+  g.add_edge(5, 6, 2.0);
+
+  g.add_edge(6, 7, 1.0);
+  g.add_edge(6, 8, 6.0);
+
+  g.add_edge(7, 8, 7.0);
+
+  cout << g.mst() << endl << endl;
+}
+
+int main() {
+  srand(time(0));
+
+#ifdef TEST_SHORTEST_PATH
+  test1_shortest_path();
+  test2_shortest_path();
+#endif
+
+  Graph g50(50);
+
+  cout << endl;
+  cout << "Average shortest path for a Graph with 50 nodes, density 20%, range 10: " << g50.monte_carlo_simu(0.2, 10, 1000) << endl;
+  cout << "Average shortest path for a Graph with 50 nodes, density 40%, range 10: " << g50.monte_carlo_simu(0.4, 10, 1000) << endl;
+  cout << endl;
+
+  //Graph gfile("data.txt");
+
+#ifdef TEST_MST
+  test1_mst();
 #endif
 
   return 1;
