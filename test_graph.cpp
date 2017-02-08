@@ -1,4 +1,36 @@
-// g++ -g -Wall -std=c++11 test_graph.cpp -o test_graph
+// g++ -Wall -std=c++11 test_graph.cpp -o test_graph
+
+// with mst on data.txt result obtained is:
+// Minimum Spanning tree: mst_cost=30
+// 	node 0 => dist=0 prev=0
+// 	node 1 => dist=1 prev=17
+// 	node 2 => dist=2 prev=0
+// 	node 3 => dist=1 prev=12
+// 	node 4 => dist=1 prev=8
+// 	node 5 => dist=1 prev=6
+// 	node 6 => dist=1 prev=1
+// 	node 7 => dist=1 prev=4
+// 	node 8 => dist=3 prev=9
+// 	node 9 => dist=1 prev=2
+// 	node 10 => dist=2 prev=7
+// 	node 11 => dist=1 prev=12
+// 	node 12 => dist=3 prev=9
+// 	node 13 => dist=3 prev=9
+// 	node 14 => dist=1 prev=11
+// 	node 15 => dist=2 prev=4
+// 	node 16 => dist=2 prev=5
+// 	node 17 => dist=1 prev=12
+// 	node 18 => dist=1 prev=14
+// 	node 19 => dist=2 prev=15
+
+// new constructor:  Graph(string fname)
+// new method: mst(), print_mst()
+
+
+// The Monte Carlo simulation results are for 1000 simulations average of average shortest path:
+// Average shortest path for a Graph with 50 nodes, density 20%, range 10: 6.97412
+// Average shortest path for a Graph with 50 nodes, density 40%, range 10: 4.70775
+
 
 #include <iostream> // for cout
 #include <vector> // for vector container (main container here)
@@ -13,6 +45,7 @@ using namespace std;
 
 // Debugging and unitary tests flags
 #define TEST_MST
+#define LOG_MST
 
 
 // computes a probability value between [0;1]
@@ -37,12 +70,6 @@ inline double prob()
 //    vector is the main container used: for direct O(1) access time
 //    a priority_queue is used during Djikstra: for fast sort/dequeing operations 
 
-// 2 small examples are provided for debugging / checking / unitary tests
-// (cf DEBUG and EXAMPLE_W2)
-
-// The Monte Carlo simulation results are for 1000 simulations average of average shortest path:
-// Average shortest path for a Graph with 50 nodes, density 20%, range 10: 6.97412
-// Average shortest path for a Graph with 50 nodes, density 40%, range 10: 4.70775
 
 
 class Graph 
@@ -62,12 +89,13 @@ class Graph
       istream_iterator<int> start(data_file), end;
       vector<int> data(start, end);
 
-      //reset();
+      nodes = data[0];
+      reset();
 
-      cout << data[0] << endl;
-      //auto it = start;
-      cout << *start << endl;
-      cout << data.size() << endl;
+      for (unsigned int i = 1; i < data.size(); i+=3)
+      {
+        add_edge(data[i], data[i+1], data[i+2]);
+      }
     };
   
     // reset/init all Graph data execot number of nodes
@@ -196,7 +224,8 @@ class Graph
     // Compute Minimum Spanning Tree via Prim algorithm (cf https://en.wikipedia.org/wiki/Prim%27s_algorithm) 
     // using a priority queue for faster execution
     // The logic and code is very similar to Dijkstra implementation
-    bool mst(void)
+    // return MST cost or -1 if MST does not exist
+    double mst(void)
     {
       int mst_len = 0;
       mst_set = false;
@@ -234,13 +263,15 @@ class Graph
             }
           }
 
-          // for debug
+#ifdef LOG_MST
           cout << "mst_len=" << mst_len << endl;
           print_mst();
+#endif
         }
       }
 
-      return mst_set = (mst_len == nodes);
+      mst_set = (mst_len == nodes);
+      return (mst_set) ? mst_cost : -1;
     }
 
     // print Minimum Spanning Tree
@@ -327,17 +358,28 @@ class Graph
         closed_set_prev[i] = -1;
       }
     }
+
+    ////////
+    // Graph
+    ////////
   
     int nodes; // number of nodes
     vector< vector<double> > mat; // connectivity matrix
   
+    /////////////////
+    // Shortest Paths
+    /////////////////
+
     // closed_set stores information about all shortest paths
     bool closed_set; // whether closed set is known or not
     int closed_set_src; // src from which all shortest paths (stored in closed_set) are computed
     vector<double> closed_set_dist; // shortest distance from src to nodes
     vector<int> closed_set_prev; // previous node on the shortest path
 
+    /////////////////////////
     // Minnimum Spanning Tree
+    /////////////////////////
+
     bool mst_set; // whether MST exists or not
     double mst_cost;
     vector<double> mst_set_dist; // array of distances from the closest edge (cf below) to each vertex
@@ -412,7 +454,7 @@ void test2_shortest_path()
   cout << "average_shortest_path: " << g.average_shortest_path() << endl;
 }
 
-void test1_mst()
+void test2_mst()
 {
   cout << "UNITARY TEST: " << __func__ << endl;
   Graph g(9);
@@ -442,6 +484,31 @@ void test1_mst()
   cout << g.mst() << endl << endl;
 }
 
+void test1_mst()
+{
+  cout << "UNITARY TEST: " << __func__ << endl;
+  Graph g(7);
+  
+  g.add_edge(0, 1, 3.0);
+  g.add_edge(0, 6, 2.0);
+
+  g.add_edge(1, 2, 5.0);
+  g.add_edge(1, 6, 2.0);
+
+  g.add_edge(2, 3, 4.0);
+  g.add_edge(2, 6, 4.0);
+
+  g.add_edge(3, 4, 5.0);
+  g.add_edge(3, 5, 5.0);
+  g.add_edge(3, 6, 6.0);
+
+  g.add_edge(4, 5, 3.0);
+
+  g.add_edge(5, 6, 4.0);
+
+  cout << g.mst() << endl << endl;
+}
+
 int main() {
   srand(time(0));
 
@@ -457,11 +524,14 @@ int main() {
   cout << "Average shortest path for a Graph with 50 nodes, density 40%, range 10: " << g50.monte_carlo_simu(0.4, 10, 1000) << endl;
   cout << endl;
 
-  //Graph gfile("data.txt");
-
 #ifdef TEST_MST
   test1_mst();
+  test2_mst();
 #endif
+
+  Graph gfile("data.txt");
+  //cout << gfile;
+  cout << "mst cost for data.txt: " << gfile.mst() << endl << endl;
 
   return 1;
 }
